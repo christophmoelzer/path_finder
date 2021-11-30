@@ -1,0 +1,3 @@
+<launch>
+    <node pkg="path_finder" type="path_finder" name="path_finder" output="screen"/>
+</launch>

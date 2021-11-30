@@ -1,0 +1,26 @@
+{
+  "configurations": [
+    {
+      "browse": {
+        "databaseFilename": "",
+        "limitSymbolsToIncludedHeaders": true
+      },
+      "includePath": [
+        "/home/chris/catkin_ws/devel/include/**",
+        "/opt/ros/melodic/include/**",
+        "/home/chris/catkin_ws/src/beginner_tutorials/include/**",
+        "/home/chris/catkin_ws/src/slam_explore/m-explore/explore/include/**",
+        "/home/chris/catkin_ws/src/moelzer/include/**",
+        "/home/chris/catkin_ws/src/slam_explore/m-explore/map_merge/include/**",
+        "/home/chris/catkin_ws/src/path_finder/include/**",
+        "/home/chris/catkin_ws/src/slam_explore/room_mapping/include/**",
+        "/home/chris/catkin_ws/src/turtlebot3_simulations/turtlebot3_fake/include/**",
+        "/home/chris/catkin_ws/src/turtlebot3_simulations/turtlebot3_gazebo/include/**",
+        "/home/chris/catkin_ws/src/turtlebot3/turtlebot3_slam/include/**",
+        "/usr/include/**"
+      ],
+      "name": "ROS"
+    }
+  ],
+  "version": 4
+}
