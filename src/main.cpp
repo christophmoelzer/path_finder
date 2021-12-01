@@ -9,22 +9,59 @@ struct weighted_point{
     int dist;
 };
 
+struct point_n_path{
+    cv::Point point;
+    std::vector<cv::Point> path;
+};
+
 // Check if Node is free
 bool checkFree(cv::Point point, cv::Mat map){
     if(map.at<uchar>(point.x,point.y) > 0){
-        //std::cout << (int)map.at<uchar>(point.x,point.y) << std::endl;
         return true;
     }
     else{
-        //std::cout << "Point is not free" << std::endl;
         return false;
     }
+}
+
+bool checkCorner(cv::Point point, cv::Mat map){
+    // Set offset neighbour cells
+    std::vector<cv::Point> neighbours;
+    cv::Point temp_point;
+    int wall_counter=0;
+
+    neighbours.push_back({0,-1});
+    neighbours.push_back({-1,0});
+    neighbours.push_back({1,0});
+    neighbours.push_back({0,1});
+
+    neighbours.push_back({-1,-1});
+    neighbours.push_back({-1,1});
+    neighbours.push_back({1,-1});
+    neighbours.push_back({1,1});
+
+
+    for(int idx=0; idx<neighbours.size(); idx++){
+        temp_point=point+neighbours[idx];
+        if (map.at<uchar>(temp_point.x,temp_point.y) == 0) {
+            
+            wall_counter++;
+        }
+    }
+
+    if (wall_counter >= 5){
+        return true;
+    }
+    else{
+        return false;
+    }
+
 }
 
 // Check if Node is Destination
 bool checkDestination(cv::Point point, cv::Point dest){
     if(point == dest){
-        std::cout << "Point is destination" << std::endl;
+        ROS_INFO_STREAM("Point is destination");
         return true;
     }
     else{
@@ -36,19 +73,16 @@ bool checkDestination(cv::Point point, cv::Point dest){
 // Calculate Distance
 int calcDistance(cv::Point point, cv::Point dest){
     int dist = (abs(point.x-dest.x)+abs(point.y-dest.y));
-    //std::cout << "dist = " << dist << std::endl;
 
     return dist;
 }
 
-
 // Check if Node is valid
 bool checkValid(cv::Point point, cv::Point origin, cv::Mat map){
-    if (point.x >= 0 && point.x < map.cols && point.y >= 0 && point.y < map.rows && point!=origin){
+    if (point.x >= 0 && point.x < map.cols && point.y >= 0 && point.y < map.rows && point!=origin && map.at<uchar>(point.x,point.y) != 0 ){
         return true;
     }
     else{
-        //std::cout << "Point is not valid" << std::endl;
         return false;
     }
 
@@ -57,9 +91,7 @@ bool checkValid(cv::Point point, cv::Point origin, cv::Mat map){
 bool checkLastPoints(cv::Point point, std::vector<cv::Point> last_points){
     if (last_points.size() > 0){
         for(int i=0; i<last_points.size(); i++){
-            //std::cout << "x/y: " << point << std::endl;
             if(point.x == last_points[i].x && point.y == last_points[i].y){
-                //std::cout << "already visited" << std::endl;
                 return false;
             }
         }
@@ -69,15 +101,177 @@ bool checkLastPoints(cv::Point point, std::vector<cv::Point> last_points){
 
 void printVector(std::string text,std::vector<cv::Point> vec){
     for(int i=0; i<vec.size(); i++){
-        //std::cout << text << " " << i << " --> x/y = " << vec[i] << std::endl;
-        std::cout << i << "->" << vec[i] << "; ";
+        ROS_INFO_STREAM(i << "->" << vec[i] << "; ");
     }
 }
 
 void printVector(std::string text,std::vector<int> vec){
     for(int i=0; i<vec.size(); i++){
-        std::cout << text << " " << i << " --> weigth = " << vec[i] << std::endl;
+        ROS_INFO_STREAM(text << " " << i << " --> weight = " << vec[i]);
     }
+}
+
+cv::Mat readMap(std::string path_to_map){
+    
+    // Import the map and convert it to to gray
+    cv::Mat map = cv::imread(path_to_map);
+    cv::cvtColor(map, map, CV_BGR2GRAY);
+    map.convertTo(map, CV_8U);
+
+    // Show size of map
+    ROS_INFO_STREAM("SIZE = " << map.rows << " / " << map.cols );
+
+    return map;
+}
+
+point_n_path searchLoop(cv::Mat map, cv::Point start, std::vector<cv::Point> corners, int max_cycles){ //, cv::Point dest){
+    int cycles = 0;
+    cv::Point destination(23,23);
+    // Create weighted map for path planning
+    cv::Mat weight_map = cv::Mat::zeros(map.rows,map.cols,CV_32S);
+    for(int x=0; x<weight_map.rows; x++){
+        for(int y=0; y<weight_map.cols; y++){
+            weight_map.at<int>(x,y)=-1;
+        }        
+    }
+
+    weight_map.at<int>(start.x,start.y)=0;          // Set the start point on the weighted map (value "0" equals the start point)
+    map.at<uchar>(start.x,start.y)=50;              // Mark start and end point on the map
+    map.at<uchar>(destination.x,destination.y)=50;
+    
+    
+    std::vector<cv::Point> visited;               // Vector for visited cells
+    std::vector<cv::Point> path;                  // Vector for path
+    std::vector<cv::Point> temp_queue;            // Vector for temporary queue
+    std::vector<cv::Point> persistent_queue;      // Vector for persistent queue
+    std::vector<int> weight;                      // Vector for weights (assigned to visited vector) 
+
+    // Set offset neighbour cells
+    std::vector<cv::Point> neighbours;
+    neighbours.push_back({0,-1});
+    neighbours.push_back({-1,0});
+    neighbours.push_back({1,0});
+    neighbours.push_back({0,1});
+
+    bool is_destination = false;
+    int temp_breath_cells=0;
+    int breath_counter=0;
+    int temp_cycle_counter=0;
+    int old_queue_size=0;
+
+    
+    visited.push_back(start);   // The search starts at the start point
+    weight.push_back(0);        // The start point is weighted with the value "0"
+
+    cv::Point offset;
+    cv::Point temp_point;
+
+    ROS_INFO_STREAM("Press any key to start");
+    //cv::waitKey(0);
+
+
+    // Search the destination point
+    while((cycles < max_cycles) && not(is_destination)){
+        // Search valid neighbour cells around the visited cell
+                    
+        // Check neighbour cells
+        for(int idx=0; idx<neighbours.size(); idx++){
+            temp_point=visited[visited.size()-1]+neighbours[idx];
+            if(checkValid(temp_point, visited[visited.size()-1], map)){     // The point has to be inside the map
+                if(checkLastPoints(temp_point,visited) && checkLastPoints(temp_point,corners)){                    // The point must NOT be visited
+                    if(checkLastPoints(temp_point,temp_queue)){             // The point must NOT be in the temp_queue
+                        if(checkFree(temp_point,map) and false){                      // The point must be free
+                            
+                            temp_queue.push_back(temp_point);                                   // Append the point to the temp_queue
+                            persistent_queue.push_back(temp_point);
+                            //map.at<uchar>(temp_point.x,temp_point.y)=100;                       // Mark the cell as next search cell
+                            weight_map.at<int>(temp_point.x,temp_point.y)=breath_counter+1;     // Set the weight for the current breath
+                            
+                            if(checkDestination(temp_point,destination)){                       // Check for destionation point
+                                is_destination=true;
+                            }
+                            
+                        }
+                        else{
+
+                            if(checkCorner(temp_point,map)){
+                                is_destination=true;
+                                destination = temp_point;
+                                map.at<uchar>(destination.x,destination.y)=50;
+                                ROS_INFO_STREAM("Corner found");
+                            }
+
+                            temp_queue.push_back(temp_point);                                   // Append the point to the temp_queue
+                            persistent_queue.push_back(temp_point);
+                            //map.at<uchar>(temp_point.x,temp_point.y)=100;                       // Mark the cell as next search cell
+                            weight_map.at<int>(temp_point.x,temp_point.y)=breath_counter+1;     // Set the weight for the current breath
+
+
+                            
+                        }
+                    }
+                }
+            }
+        }
+
+        // Increase the breath counter
+        if(temp_cycle_counter>=temp_breath_cells){
+            temp_breath_cells = persistent_queue.size()-old_queue_size;
+            old_queue_size = persistent_queue.size();
+            temp_cycle_counter=0;
+            breath_counter++;
+            
+            cv::waitKey(30);
+        }
+        temp_cycle_counter++;
+
+
+        visited.push_back(temp_queue[0]);                   // Copy the first temp_queue element to visited
+        //map.at<uchar>(temp_queue[0].x,temp_queue[0].y)=30;  // Mark the cell as visited (value = 30)
+        weight.push_back(breath_counter);                   // Set the weight for the current cell
+        temp_queue.erase(temp_queue.begin());               // Remove the first temp_queue element
+        ++cycles;
+
+       // cv::imshow("map", map);                             // Show map for visualization of the search algorithm
+    }
+    
+    // Search has finished       
+    ROS_INFO_STREAM("Iterations: " << cycles);
+    ROS_INFO_STREAM("Breaths: " << breath_counter);
+
+    // Reconstruct path
+    bool path_ok=false;
+    path.push_back(destination);
+    map.at<uchar>(destination.x,destination.y)=200;
+    int temp_weight=weight_map.at<int>(destination.x,destination.y);
+
+    while((cycles < max_cycles) && not(path_ok)){
+        cycles++;
+        for(int idx=0; idx<neighbours.size(); idx++){
+            temp_point=path[path.size()-1]+neighbours[idx];
+
+            // Search neighbour with the lower weight
+            if((weight_map.at<int>(temp_point.x,temp_point.y) < temp_weight) && (weight_map.at<int>(temp_point.x,temp_point.y) > -1)){
+
+                path.push_back(temp_point);                                 // Attach the current point to the path
+                temp_weight=weight_map.at<int>(temp_point.x,temp_point.y);  // Set new weight for the path search
+                map.at<uchar>(temp_point.x,temp_point.y)=200;               // Mark point as path point (value = 200)
+
+                if(weight_map.at<int>(temp_point.x,temp_point.y) == 0){     // Check if point is start point
+                    path_ok = true;
+                }
+            }
+        }
+        cv::waitKey(1);
+        cv::imshow("map", map);         // Visualize path reconstruction
+    }
+
+    point_n_path ret_val;
+
+    ret_val.path = path;
+    ret_val.point = destination;
+
+    return ret_val;
 }
 
 int main(int argc, char **argv){
@@ -87,181 +281,50 @@ int main(int argc, char **argv){
     ros::Publisher chatter_pub = n.advertise<std_msgs::String>("chatter", 1000);
     ros:: Rate loop_rate(1);
 
-    int cycles = 0;
+    bool run_once = false;
+    int loop_counter = 0;
 
-    cv::Point start(4,4);
-    cv::Point destination(4,24);
+    cv::Point start(6,6);
+    cv::Point destination(27,20);
+    std::vector<cv::Point> path;
+    std::vector<cv::Point> corners;
+    point_n_path ret_val;
     cv::namedWindow("map",0);
-
-
-    while(ros::ok() && cycles==0){
-        
-        /*std_msgs::String msg;
-        std::stringstream ss;
-        ss << "foo" << count;
-        msg.data = ss.str();
-        ROS_INFO("%s", msg.data.c_str());
-        chatter_pub.publish(msg);*/
+    
+    while(ros::ok() && loop_counter<=10){
+        run_once=true;
+        loop_counter++;
 
         ros::spinOnce();
         loop_rate.sleep();
         
-
-       
-        cv::Mat map = cv::imread("/home/chris/Desktop/map.png");
-        cv::cvtColor(map, map, CV_BGR2GRAY);
-        map.convertTo(map, CV_8U);
-
-        if(map.rows <= 0){
-            std::cout << "Loading of map failed!" << std::endl;
+        cv::Mat map = readMap("/home/chris/Desktop/map.png");   // Import the map and convert it to to gray
+        if(map.rows <= 0){                                          // Check if map is valid
+            ROS_INFO_STREAM("Loading of map failed!");
             return -1;
         }
 
-        cv::Mat weight_map = cv::Mat::zeros(map.rows,map.cols,CV_32S);
-        for(int x=0; x<weight_map.rows; x++){
-            for(int y=0; y<weight_map.cols; y++){
-                weight_map.at<int>(x,y)=-1;
-            }        
-        }
-        weight_map.at<int>(start.x,start.y)=0;
+        ROS_INFO_STREAM("start");
+        ret_val=searchLoop(map, start, corners, 800);    // search path to destination
+        ROS_INFO_STREAM("stop");
+        corners.push_back(ret_val.point);
+        start = ret_val.point;
+        std::string path_desktop = "/home/chris/Desktop/";
+        std::string extension = ".pgm";
 
-        // Mark start and end point on the map
-        map.at<uchar>(start.x,start.y)=50;
-        map.at<uchar>(destination.x,destination.y)=50;
+        std::stringstream ss;
+        ss << loop_counter;
+        std::string filename = ss.str();
         
-        // Show size of map
-        ROS_INFO_STREAM("SIZE = " << map.rows << " / " << map.cols );
+        path_desktop.append(filename);
+        path_desktop.append(extension);
 
-        // Define two lists
-        // Visited list
-        std::vector<cv::Point> visited;
-        std::vector<cv::Point> path;
-        // Queue list
-        std::vector<cv::Point> queue;
-        std::vector<cv::Point> persistent_queue;
-        // Weigth list
-        std::vector<int> weigth;
-        //
-        std::vector<cv::Point> neighbours;
-        neighbours.push_back({0,-1});
-        neighbours.push_back({-1,0});
-        neighbours.push_back({1,0});
-        neighbours.push_back({0,1});
-
-        bool is_destination = false;
-        int temp_breath_cells=0;
-        int breath_counter=0;
-        int temp_cycle_counter=0;
-        int old_queue_size=0;
-
-        // The search starts at the start point
-        visited.push_back(start);
-        weigth.push_back(0);
-
-        cv::Point offset;
-        cv::Point temp_point;
-
-        while((cycles < 1000) && not(is_destination)){
-            
-            
-            // Search valid neighbour cells around the visited cell
-            
-            bool no_valid_point = true;
-            int valid_counter = 0;
-            
-            //for(offset.x=-1; offset.x<=1; offset.x++){
-            //    for(offset.y=-1; offset.y<=1; offset.y++){
-            for(int idx=0; idx<neighbours.size(); idx++){
-                temp_point=visited[visited.size()-1]+neighbours[idx];
-                if(checkValid(temp_point, visited[visited.size()-1], map)){  // The point has to be inside the map
-                    if(checkLastPoints(temp_point,visited)){
-                        if(checkLastPoints(temp_point,queue)){
-                            if(checkFree(temp_point,map)){
-                                queue.push_back(temp_point);
-                                persistent_queue.push_back(temp_point);
-                                //std::cout << temp_point << std::endl;
-                                valid_counter++;
-                                map.at<uchar>(temp_point.x,temp_point.y)=100;
-                                weight_map.at<int>(temp_point.x,temp_point.y)=breath_counter+1;
-                                no_valid_point=false;
-                                if(!checkDestination(temp_point,destination)){  // The point is not the destination
-                                    
-                                }
-                                else{
-                                    is_destination=true;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            //}
-
-            // Breath counter
-            //printVector("queue: ",queue);
-            //std::cout << "new cells = " << valid_counter << std::endl;
-            //std::cout << "temp cells = " << temp_cycle_counter << "/" << temp_breath_cells << std::endl;
-            if(temp_cycle_counter>=temp_breath_cells){
-                //std::cout << persistent_queue.size() << " - " << old_queue_size << " = ";
-                temp_breath_cells = persistent_queue.size()-old_queue_size;
-                //std::cout << temp_breath_cells << std::endl;
-                //persistent_queue.erase(persistent_queue.begin(),persistent_queue.begin()+temp_breath_cells-1);
-                old_queue_size = persistent_queue.size();
-                temp_cycle_counter=0;
-                breath_counter++;
-                //std::cout << "new breath: " << breath_counter << std::endl;
-                //std::cout << "breath queue: " << temp_breath_cells << "/" << persistent_queue.size() << std::endl;
-                //printVector("", persistent_queue);
-                //std::cout << std::endl;
-                cv::waitKey(0);
-                
-            }
-            temp_cycle_counter++;
-
-            // Copy the first queue element to visited
-            visited.push_back(queue[0]);
-            weigth.push_back(breath_counter);
-            map.at<uchar>(queue[0].x,queue[0].y)=30;
-            // Remove the first queue element
-            queue.erase(queue.begin());
-            
-            cv::imshow("map", map);
-            
-            ++cycles;
-        }
-        //printVector("queue: ",queue);
-        //printVector("visited: ",visited);        
-        //printVector("weigth: ",weigth);        
-        std::cout << cycles << std::endl;
-
-        //std::cout << weight_map;
-
-        //Reconstruct path
-        bool path_ok=false;
-        path.push_back(destination);
-        int temp_weigth=weight_map.at<int>(destination.x,destination.y);
-        while((cycles < 1000) && not(path_ok)){
-            cycles++;
-            for(int idx=0; idx<neighbours.size(); idx++){
-                //for(offset.x=-1; offset.x<=1; offset.x++){
-                //for(offset.y=-1; offset.y<=1; offset.y++){
-                temp_point=path[path.size()-1]+neighbours[idx];
-                if((weight_map.at<int>(temp_point.x,temp_point.y) < temp_weigth) && (weight_map.at<int>(temp_point.x,temp_point.y) > -1)){
-                    path.push_back(temp_point);
-                    temp_weigth=weight_map.at<int>(temp_point.x,temp_point.y);
-                    map.at<uchar>(temp_point.x,temp_point.y)=200;
-                    if(weight_map.at<int>(temp_point.x,temp_point.y) == 0){
-                        path_ok = true;
-                    }
-                }
-                //}
-            }
-        }
-        printVector("path", path);
-        cv::imshow("map", map);
-        
+        cv::imwrite(path_desktop,map);
+        cv::waitKey(0);
     }
-        
+    
+    ROS_INFO_STREAM("Press any key to exit");
     cv::waitKey(0);
+    
     return 0;
 }
