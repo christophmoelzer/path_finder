@@ -81,11 +81,15 @@ int calcDistance(cv::Point point, cv::Point dest){
 
 // Check if Node is valid
 bool checkValid(cv::Point point, cv::Point origin, cv::Mat map, bool free_flag){
+    //std::cout << "cV 1";
     if (free_flag==true){
+        //std::cout << "cV 2";
         if (point.x >= 0 && point.x < map.cols && point.y >= 0 && point.y < map.rows && point != origin){
+            //std::cout << "cV 3";
             return true;
         }
         else{
+            //std::cout << "cV 4";
             return false;
         }
     }
@@ -102,14 +106,24 @@ bool checkValid(cv::Point point, cv::Point origin, cv::Mat map, bool free_flag){
 }
 
 bool checkLastPoints(cv::Point point, std::vector<cv::Point> last_points){
+    //std::cout << "last points size (1) = " << last_points.size() << std::endl;
     if (last_points.size() > 0){
+        //std::cout << "last points size (2) = " << last_points.size() << std::endl;
         for(int i=0; i<last_points.size(); i++){
+            //std::cout << "index = " << i << " -> " << last_points[i] << std::endl;
             if(point.x == last_points[i].x && point.y == last_points[i].y){
                 return false;
             }
         }
     }
+    else{
+        std::cout << "there are no points to check" << std::endl;
+        //return false;
+    }
+    //std::cout << "before return" << std::endl;
     return true;
+    //std::cout << "after return" << std::endl;
+    
 }
 
 void printVector(std::string text,std::vector<cv::Point> vec){
@@ -162,11 +176,11 @@ point_n_path searchLoop(cv::Mat map, cv::Point start, std::vector<cv::Point> cor
 
         break;
     case 3:
-        neighbours.push_back({-1,0});
+        neighbours.push_back({0,1});
 
         break;
     case 4:
-        neighbours.push_back({0,1});
+        neighbours.push_back({-1,0});
 
         break;
     case 5:
@@ -236,56 +250,85 @@ point_n_path searchLoop(cv::Mat map, cv::Point start, std::vector<cv::Point> cor
                     
         // Check neighbour cells
         for(int idx=0; idx<neighbours.size(); idx++){
-            if (methode==2) std::cout << "-----------------" << std::endl<< std::endl;
+            std::cout << std::endl << "visited point = " << visited[visited.size()-1] << std::endl;
+            std::cout << "neighbour point = " << neighbours[idx] << std::endl;
             temp_point=visited[visited.size()-1]+neighbours[idx];
-            
-            if(checkLastPoints(temp_point,visited) && checkLastPoints(temp_point,corners)){                    // The point must NOT be visited
-                if (methode==2) std::cout << "not visited " << temp_point << std::endl;
-                if(checkLastPoints(temp_point,temp_queue)){             // The point must NOT be in the temp_queue
-                    if (methode==2) std::cout << "not in queue " << temp_point << std::endl;
-                    if(checkValid(temp_point, visited[visited.size()-1], map, free_flag)){     // The point has to be inside the map
-                        if (methode==2) std::cout << "valid " << temp_point << std::endl;
-                        switch (methode)
-                        {
-                        case 1: // Corner
+            std::cout << "new point = " << temp_point << std::endl;
+            std::cout << std::endl;
+            switch (methode)
+            {
+            case 1:{    // Corner
+                if(checkLastPoints(temp_point,visited) && checkLastPoints(temp_point,corners)){                    // The point must NOT be visited
+                    if(checkLastPoints(temp_point,temp_queue)){             // The point must NOT be in the temp_queue
+                        if(checkValid(temp_point, visited[visited.size()-1], map, free_flag)){     // The point has to be inside the map
                             if(checkCorner(temp_point,map)){
                                 is_destination=true;
                                 destination = temp_point;
                                 map.at<uchar>(destination.x,destination.y)=50;
                                 ROS_INFO_STREAM("Corner found");
                             }
-
                             temp_queue.push_back(temp_point);                                   // Append the point to the temp_queue
                             persistent_queue.push_back(temp_point);
                             //map.at<uchar>(temp_point.x,temp_point.y)=100;                       // Mark the cell as next search cell
-                            weight_map.at<int>(temp_point.x,temp_point.y)=breath_counter+1;     // Set the weight for the current breath
-                            break;
-                        case 2: case 3: case 4: case 5: // Next wall up or down
-                            std::cout << "methode = " << methode << std::endl;
+                            weight_map.at<int>(temp_point.x,temp_point.y)=breath_counter+1;     // Set the weight for the current breath    
+                        }
+                    }
+                }
+                break;
+            }
+            case 2:{ case 3: case 4: case 5:     // Search next wall / obstacle
+                if(checkLastPoints(temp_point,visited) && checkLastPoints(temp_point,corners)){                    // The point must NOT be visited
+                    //std::cout << "not visited " << temp_point << std::endl;
+                    //std::cout << "temp queue size (1) = " << temp_queue.size() << std::endl;
+                    //std::cout << "checkLastPoints = " << checkLastPoints(temp_point,temp_queue) << std::endl;
+                    printVector("------------> temp queue",temp_queue);
+                    if(checkLastPoints(temp_point,temp_queue)){             // The point must NOT be in the temp_queue
+                        //std::cout << "not in queue " << temp_point << std::endl;
+                        if(checkValid(temp_point, visited[visited.size()-1], map, free_flag)){     // The point has to be inside the map
+                            //std::cout << "valid " << temp_point << std::endl;
+                            //std::cout << "methode = " << methode << std::endl;
                             if(checkFree(temp_point,map)){                      // The point must be free
                             
                                 temp_queue.push_back(temp_point);                                   // Append the point to the temp_queue
                                 persistent_queue.push_back(temp_point);
-                                //map.at<uchar>(temp_point.x,temp_point.y)=100;                       // Mark the cell as next search cell
+                                map.at<uchar>(temp_point.x,temp_point.y)=100;                       // Mark the cell as next search cell
                                 weight_map.at<int>(temp_point.x,temp_point.y)=breath_counter+1;     // Set the weight for the current breath
                                 
-                                std::cout << "free " << temp_point << std::endl;
+                                //std::cout << "free " << temp_point << std::endl;
                             }
                             else if(!checkFree(temp_point,map) && free_flag){
-                                std::cout << "wall found " << temp_point << std::endl;
+                                std::cout << " ------------------> wall found " << temp_point << std::endl;
                                 wall_flag=true;
                                 free_flag=false;
                                 is_destination=true;
                                 destination = temp_point;
                             }
                             else{
-                                std::cout << "not free" << std::endl;
-                                
+                                //std::cout << "not free" << std::endl;
                             }
-
-                            break;
-                        
-                        case 6: // Point
+                            cv::imshow("map", map); 
+                            cv::waitKey(0);
+                        }
+                        else{
+                            if (!wall_flag) free_flag = true;
+                            //std::cout << "not valid " << temp_point << std::endl;
+                        }
+                    }
+                    else{
+                        //std::cout << " in queue" << temp_point << std::endl;
+                    }
+                }
+                else{
+                    //std::cout << " visited " << temp_point << std::endl;
+                }
+                break;
+            }
+            case 6:{    // Destination Point
+                if(checkLastPoints(temp_point,visited) && checkLastPoints(temp_point,corners)){                    // The point must NOT be visited
+                    std::cout << "temp queue size (1) = " << temp_queue.size() << std::endl;
+                    std::cout << "checkLastPoints = " << checkLastPoints(temp_point,temp_queue) << std::endl;
+                    if(checkLastPoints(temp_point,temp_queue)){             // The point must NOT be in the temp_queue
+                        if(checkValid(temp_point, visited[visited.size()-1], map, free_flag)){     // The point has to be inside the map
                             if(checkFree(temp_point,map)){                      // The point must be free
                             
                                 temp_queue.push_back(temp_point);                                   // Append the point to the temp_queue
@@ -297,27 +340,17 @@ point_n_path searchLoop(cv::Mat map, cv::Point start, std::vector<cv::Point> cor
                                     is_destination=true;
                                 }
                                 
-                            }
-                            break;
-                        default:
-                            break;
+                            }   
                         }
                     }
-                    else{
-                        if (methode==2){
-                            if (!wall_flag) free_flag = true;
-                            std::cout << "not valid " << temp_point << std::endl;
-                        } 
-
-                    }
                 }
-                else{
-                    if (methode==2) std::cout << " in queue" << temp_point << std::endl;
-                }
+                break;
             }
-            else{
-                if (methode==2) std::cout << " visited " << temp_point << std::endl;
+            default:
+                break;
             }
+            
+            
         }
 
         // Increase the breath counter
@@ -335,10 +368,19 @@ point_n_path searchLoop(cv::Mat map, cv::Point start, std::vector<cv::Point> cor
         visited.push_back(temp_queue[0]);                   // Copy the first temp_queue element to visited
         //map.at<uchar>(temp_queue[0].x,temp_queue[0].y)=30;  // Mark the cell as visited (value = 30)
         weight.push_back(breath_counter);                   // Set the weight for the current cell
-        temp_queue.erase(temp_queue.begin());               // Remove the first temp_queue element
+        std::cout << "temp queue size (2) = " << temp_queue.size() << std::endl;
+        
+        if (temp_queue.size()>0){
+            std::cout << "erease temp queue first element" << std::endl;
+            temp_queue.erase(temp_queue.begin());               // Remove the first temp_queue element
+        }
+        else{
+            std::cout << "couldn't erease first element of temp queue (size = 0)" << std::endl;
+        }
+        std::cout << "temp queue size (3) = " << temp_queue.size() << std::endl;
         ++cycles;
 
-       // cv::imshow("map", map);                             // Show map for visualization of the search algorithm
+        cv::imshow("map", map);                             // Show map for visualization of the search algorithm
     }
     
     // Search has finished       
@@ -395,7 +437,7 @@ int main(int argc, char **argv){
     std::vector<cv::Point> path;
     std::vector<cv::Point> corners;
     point_n_path ret_val;
-    //cv::namedWindow("map",0);
+    cv::namedWindow("map",0);
 
     
     
@@ -419,14 +461,21 @@ int main(int argc, char **argv){
         cv::imwrite("/home/chris/Desktop/a.pgm",map);
         ROS_INFO_STREAM("stop");
         corners.push_back(ret_val.point);
-        start = ret_val.point;
-        ret_val=searchLoop(map, start, corners, 800, 2);    // search path to destination
+        std::cout << "corner size = " << corners.size() << std::endl;
+        //start = ret_val.point;
+        ret_val=searchLoop(map, ret_val.point, corners, 800, 2);    // search path to destination
         cv::imwrite("/home/chris/Desktop/b.pgm",map);
         
         corners.push_back(ret_val.point);
-        start = ret_val.point;
-        ret_val=searchLoop(map, start, corners, 800, 3);    // search path to destination
+        //start = ret_val.point;
+        ret_val=searchLoop(map, corners[0], corners, 800, 4);    // search path to destination
         cv::imwrite("/home/chris/Desktop/c.pgm",map);
+
+        ret_val=searchLoop(map, corners[0], corners, 800, 3);    // search path to destination
+        cv::imwrite("/home/chris/Desktop/d.pgm",map);
+
+        ret_val=searchLoop(map, corners[0], corners, 800, 5);    // search path to destination
+        cv::imwrite("/home/chris/Desktop/e.pgm",map);
 
         std::string path_desktop = "/home/chris/Desktop/";
         std::string extension = ".pgm";
@@ -440,7 +489,7 @@ int main(int argc, char **argv){
     }
     
     ROS_INFO_STREAM("Press any key to exit");
-    //cv::waitKey(10);
+    cv::waitKey(0);
     
     return 0;
 }
