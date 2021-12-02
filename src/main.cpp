@@ -249,6 +249,10 @@ point_n_path searchLoop(cv::Mat map, cv::Point start, std::vector<cv::Point> cor
     //cv::waitKey(0);
 
 
+    int steps_to_wall=0;    // Counter to determine distance to wall
+    std::vector<cv::Point> wall_vector;
+    std::vector<int> step_vector;
+
     // Search the destination point
     while((cycles < max_cycles) && not(is_destination)){
         // Search valid neighbour cells around the visited cell
@@ -313,10 +317,13 @@ point_n_path searchLoop(cv::Mat map, cv::Point start, std::vector<cv::Point> cor
                             }
                             else if(!checkFree(temp_point,map) && free_flag){
                                 std::cout << " ------------------> wall found " << temp_point << std::endl;
+                                std::cout << "distance to wall = " << steps_to_wall << std::endl;
+                                wall_vector.push_back(temp_point-neighbours[idx]);
+                                step_vector.push_back(steps_to_wall);
                                 wall_flag=true;
                                 free_flag=false;
                                 is_destination=true;
-                                destination = temp_point;
+                                destination = temp_point-neighbours[idx];
                             }
                             else{
                                 //std::cout << "not free" << std::endl;
@@ -337,6 +344,7 @@ point_n_path searchLoop(cv::Mat map, cv::Point start, std::vector<cv::Point> cor
                     // std::cout << " visited " << temp_point << std::endl;
                 }
                 // std::cout << "case 2,3,4,5 finished" << std::endl;
+                steps_to_wall++;
                 break;
             }
             case 6:{    // Destination Point
@@ -408,27 +416,57 @@ point_n_path searchLoop(cv::Mat map, cv::Point start, std::vector<cv::Point> cor
     //ROS_INFO_STREAM("Breaths: " << breath_counter);
 
     // Reconstruct path
-    bool path_ok=false;
-    path.push_back(destination);
-    map.at<uchar>(destination.x,destination.y)=200;
-    int temp_weight=weight_map.at<int>(destination.x,destination.y);
+    int temp_weight;
+    bool path_ok;
+    
+    switch (methode)
+    {
+    case 2: case 3: case 4: case 5:
+        neighbours[0] = neighbours[0] * -1;
+        //std::cout << "neighbours" << neighbours[0] << std::endl;
+        std::cout << "reconstruct path" << std::endl;
+        path_ok=false;
+        if (steps_to_wall>1){
+            map.at<uchar>(destination.x,destination.y)=200;
+        }
+        path.push_back(destination);
+        
+        temp_weight=weight_map.at<int>(destination.x,destination.y);
+        break;
+    
+    default:
+        std::cout << "reconstruct path" << std::endl;
+        path_ok=false;
+        path.push_back(destination);
+        map.at<uchar>(destination.x,destination.y)=200;
+        temp_weight=weight_map.at<int>(destination.x,destination.y);
+        break;
+    }
 
-    while((cycles < max_cycles) && not(path_ok)){
+    bool stop_path_reconstruction = false;
+    while((cycles < max_cycles) && not(path_ok) && not(stop_path_reconstruction)){
         cycles++;
+        
         for(int idx=0; idx<neighbours.size(); idx++){
             temp_point=path[path.size()-1]+neighbours[idx];
+            if (weight_map.at<int>(temp_point.x,temp_point.y)<0){
+                stop_path_reconstruction=true;
+            }
+            else{
+                std::cout << "path temp point = " << temp_point << " weight at map " << weight_map.at<int>(temp_point.x,temp_point.y) << " weight "  << temp_weight << std::endl;
+                // Search neighbour with the lower weight
+                if((weight_map.at<int>(temp_point.x,temp_point.y) < temp_weight) && (weight_map.at<int>(temp_point.x,temp_point.y) > -1)){
 
-            // Search neighbour with the lower weight
-            if((weight_map.at<int>(temp_point.x,temp_point.y) < temp_weight) && (weight_map.at<int>(temp_point.x,temp_point.y) > -1)){
+                    path.push_back(temp_point);                                 // Attach the current point to the path
+                    temp_weight=weight_map.at<int>(temp_point.x,temp_point.y);  // Set new weight for the path search
+                    map.at<uchar>(temp_point.x,temp_point.y)=99;               // Mark point as path point (value = 200)
 
-                path.push_back(temp_point);                                 // Attach the current point to the path
-                temp_weight=weight_map.at<int>(temp_point.x,temp_point.y);  // Set new weight for the path search
-                map.at<uchar>(temp_point.x,temp_point.y)=100;               // Mark point as path point (value = 200)
-
-                if(weight_map.at<int>(temp_point.x,temp_point.y) == 0){     // Check if point is start point
-                    path_ok = true;
+                    if(weight_map.at<int>(temp_point.x,temp_point.y) == 0){     // Check if point is start point
+                        path_ok = true;
+                    }
                 }
             }
+            
         }
         //cv::waitKey(1);
         //cv::imshow("map", map);         // Visualize path reconstruction
@@ -452,7 +490,7 @@ int main(int argc, char **argv){
     bool run_once = false;
     int loop_counter = 0;
 
-    cv::Point start(26,26);
+    cv::Point start(15,10);
     cv::Point destination(27,20);
     std::vector<cv::Point> path;
     std::vector<cv::Point> corners;
