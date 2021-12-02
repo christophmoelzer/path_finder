@@ -17,11 +17,11 @@ struct point_n_path{
 // Check if Node is free
 bool checkFree(cv::Point point, cv::Mat map){
     if(map.at<uchar>(point.x,point.y) > 0){
-        std::cout << "free " << point << std::endl;
+        // std::cout << "free " << point << std::endl;
         return true;
     }
     else{
-        std::cout << "not free " << point << std::endl;
+        // std::cout << "not free " << point << std::endl;
         return false;
     }
 }
@@ -63,7 +63,7 @@ bool checkCorner(cv::Point point, cv::Mat map){
 // Check if Node is Destination
 bool checkDestination(cv::Point point, cv::Point dest){
     if(point == dest){
-        ROS_INFO_STREAM("Point is destination");
+        //ROS_INFO_STREAM("Point is destination");
         return true;
     }
     else{
@@ -81,7 +81,7 @@ int calcDistance(cv::Point point, cv::Point dest){
 
 // Check if Node is valid
 bool checkValid(cv::Point point, cv::Point origin, cv::Mat map, bool free_flag){
-    //std::cout << "cV 1";
+    // std::cout << "free flag = " << free_flag << std::endl;
     if (free_flag==true){
         //std::cout << "cV 2";
         if (point.x >= 0 && point.x < map.cols && point.y >= 0 && point.y < map.rows && point != origin){
@@ -94,10 +94,14 @@ bool checkValid(cv::Point point, cv::Point origin, cv::Mat map, bool free_flag){
         }
     }
     else{
+        // std::cout << "debug point: " << point << std::endl;
+        // std::cout << "debug map at point: " << (int)map.at<uchar>(point.x,point.y) << std::endl;
         if (point.x >= 0 && point.x < map.cols && point.y >= 0 && point.y < map.rows && point!=origin && map.at<uchar>(point.x,point.y) != 0 ){
+            // std::cout << "true" << std::endl;
             return true;
         }
         else{
+            // std::cout << "false" << std::endl;
             return false;
         }
     }
@@ -105,8 +109,9 @@ bool checkValid(cv::Point point, cv::Point origin, cv::Mat map, bool free_flag){
 
 }
 
-bool checkLastPoints(cv::Point point, std::vector<cv::Point> last_points){
+bool checkLastPoints(cv::Point point, std::vector<cv::Point> last_points, int debug=-1){
     //std::cout << "last points size (1) = " << last_points.size() << std::endl;
+    // std::cout << "debug info = " << debug << std::endl;
     if (last_points.size() > 0){
         //std::cout << "last points size (2) = " << last_points.size() << std::endl;
         for(int i=0; i<last_points.size(); i++){
@@ -117,7 +122,7 @@ bool checkLastPoints(cv::Point point, std::vector<cv::Point> last_points){
         }
     }
     else{
-        std::cout << "there are no points to check" << std::endl;
+        // std::cout << "there are no points to check" << std::endl;
         //return false;
     }
     //std::cout << "before return" << std::endl;
@@ -240,7 +245,7 @@ point_n_path searchLoop(cv::Mat map, cv::Point start, std::vector<cv::Point> cor
     cv::Point offset;
     cv::Point temp_point;
 
-    ROS_INFO_STREAM("Press any key to start");
+    //ROS_INFO_STREAM("Press any key to start");
     //cv::waitKey(0);
 
 
@@ -250,11 +255,11 @@ point_n_path searchLoop(cv::Mat map, cv::Point start, std::vector<cv::Point> cor
                     
         // Check neighbour cells
         for(int idx=0; idx<neighbours.size(); idx++){
-            std::cout << std::endl << "visited point = " << visited[visited.size()-1] << std::endl;
-            std::cout << "neighbour point = " << neighbours[idx] << std::endl;
+            // std::cout << std::endl << "visited point = " << visited[visited.size()-1] << std::endl;
+            // std::cout << "neighbour point = " << neighbours[idx] << std::endl;
             temp_point=visited[visited.size()-1]+neighbours[idx];
-            std::cout << "new point = " << temp_point << std::endl;
-            std::cout << std::endl;
+            // std::cout << "new point = " << temp_point << std::endl;
+            // std::cout << std::endl;
             switch (methode)
             {
             case 1:{    // Corner
@@ -277,15 +282,25 @@ point_n_path searchLoop(cv::Mat map, cv::Point start, std::vector<cv::Point> cor
                 break;
             }
             case 2:{ case 3: case 4: case 5:     // Search next wall / obstacle
-                if(checkLastPoints(temp_point,visited) && checkLastPoints(temp_point,corners)){                    // The point must NOT be visited
+                // std::cout << "Check vector size:" << std::endl;
+                // std::cout << "visited size: " << visited.size() << std::endl;
+                // std::cout << "corners size: " << corners.size() << std::endl;
+                // std::cout << "temp_queue size: " << temp_queue.size() << std::endl;
+                
+                if(checkLastPoints(temp_point,visited,1) && checkLastPoints(temp_point,corners,2)){                    // The point must NOT be visited
                     //std::cout << "not visited " << temp_point << std::endl;
                     //std::cout << "temp queue size (1) = " << temp_queue.size() << std::endl;
                     //std::cout << "checkLastPoints = " << checkLastPoints(temp_point,temp_queue) << std::endl;
-                    printVector("------------> temp queue",temp_queue);
-                    if(checkLastPoints(temp_point,temp_queue)){             // The point must NOT be in the temp_queue
+                    //printVector("------------> temp queue",temp_queue);
+
+                    if(checkLastPoints(temp_point,temp_queue,3)){             // The point must NOT be in the temp_queue
                         //std::cout << "not in queue " << temp_point << std::endl;
+                        // std::cout << "foo" << std::endl;
+                        // std::cout << "visited size = " << visited.size() << std::endl;
+                        // std::cout << "visited value = " << visited[0] << std::endl;
+                        
                         if(checkValid(temp_point, visited[visited.size()-1], map, free_flag)){     // The point has to be inside the map
-                            //std::cout << "valid " << temp_point << std::endl;
+                            // std::cout << "valid " << temp_point << std::endl;
                             //std::cout << "methode = " << methode << std::endl;
                             if(checkFree(temp_point,map)){                      // The point must be free
                             
@@ -311,16 +326,17 @@ point_n_path searchLoop(cv::Mat map, cv::Point start, std::vector<cv::Point> cor
                         }
                         else{
                             if (!wall_flag) free_flag = true;
-                            //std::cout << "not valid " << temp_point << std::endl;
+                            // std::cout << "not valid " << temp_point << std::endl;
                         }
                     }
                     else{
-                        //std::cout << " in queue" << temp_point << std::endl;
+                        // std::cout << " in queue" << temp_point << std::endl;
                     }
                 }
                 else{
-                    //std::cout << " visited " << temp_point << std::endl;
+                    // std::cout << " visited " << temp_point << std::endl;
                 }
+                // std::cout << "case 2,3,4,5 finished" << std::endl;
                 break;
             }
             case 6:{    // Destination Point
@@ -354,6 +370,7 @@ point_n_path searchLoop(cv::Mat map, cv::Point start, std::vector<cv::Point> cor
         }
 
         // Increase the breath counter
+        // std::cout << "breath counter = " << temp_cycle_counter << std::endl;
         if(temp_cycle_counter>=temp_breath_cells){
             temp_breath_cells = persistent_queue.size()-old_queue_size;
             old_queue_size = persistent_queue.size();
@@ -365,27 +382,30 @@ point_n_path searchLoop(cv::Mat map, cv::Point start, std::vector<cv::Point> cor
         temp_cycle_counter++;
 
 
-        visited.push_back(temp_queue[0]);                   // Copy the first temp_queue element to visited
+        if (temp_queue.size()>0){
+            visited.push_back(temp_queue[0]);                   // Copy the first temp_queue element to visited
+        }
+        
         //map.at<uchar>(temp_queue[0].x,temp_queue[0].y)=30;  // Mark the cell as visited (value = 30)
         weight.push_back(breath_counter);                   // Set the weight for the current cell
-        std::cout << "temp queue size (2) = " << temp_queue.size() << std::endl;
+        // std::cout << "temp queue size (2) = " << temp_queue.size() << std::endl;
         
         if (temp_queue.size()>0){
-            std::cout << "erease temp queue first element" << std::endl;
+            // std::cout << "erease temp queue first element" << std::endl;
             temp_queue.erase(temp_queue.begin());               // Remove the first temp_queue element
         }
         else{
-            std::cout << "couldn't erease first element of temp queue (size = 0)" << std::endl;
+            //std::cout << "couldn't erease first element of temp queue (size = 0)" << std::endl;
         }
-        std::cout << "temp queue size (3) = " << temp_queue.size() << std::endl;
+        // std::cout << "temp queue size (3) = " << temp_queue.size() << std::endl;
         ++cycles;
 
         cv::imshow("map", map);                             // Show map for visualization of the search algorithm
     }
     
     // Search has finished       
-    ROS_INFO_STREAM("Iterations: " << cycles);
-    ROS_INFO_STREAM("Breaths: " << breath_counter);
+    //ROS_INFO_STREAM("Iterations: " << cycles);
+    //ROS_INFO_STREAM("Breaths: " << breath_counter);
 
     // Reconstruct path
     bool path_ok=false;
@@ -456,10 +476,10 @@ int main(int argc, char **argv){
 
         
 
-        ROS_INFO_STREAM("start");
+        //ROS_INFO_STREAM("start");
         ret_val=searchLoop(map, start, corners, 800, 1);    // search path to destination
         cv::imwrite("/home/chris/Desktop/a.pgm",map);
-        ROS_INFO_STREAM("stop");
+        //ROS_INFO_STREAM("stop");
         corners.push_back(ret_val.point);
         std::cout << "corner size = " << corners.size() << std::endl;
         //start = ret_val.point;
@@ -486,10 +506,15 @@ int main(int argc, char **argv){
         path_desktop.append(extension);
         cv::imwrite(path_desktop,map);
         //cv::waitKey(10);
+
+        cv::imshow("map", map);
+        cv::waitKey(0);
+        cv::imshow("map", map);
     }
     
     ROS_INFO_STREAM("Press any key to exit");
-    cv::waitKey(0);
     
+    cv::waitKey(0);
+
     return 0;
 }
